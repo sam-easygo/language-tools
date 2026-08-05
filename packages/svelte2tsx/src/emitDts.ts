@@ -278,6 +278,22 @@ async function createTsCompilerHost(options: any, svelteMap: SvelteMap, absDecla
         });
     };
 
+    const getCanonicalFileName = ts.sys.useCaseSensitiveFileNames
+        ? (fileName: string) => fileName
+        : (fileName: string) => fileName.toLowerCase();
+    // Each resolution host gets its own cache: the two hosts disagree about
+    // whether virtual .svelte.ts/.svelte.js paths exist.
+    const tsModuleResolutionCache = ts.createModuleResolutionCache(
+        ts.sys.getCurrentDirectory(),
+        getCanonicalFileName,
+        options
+    );
+    const svelteModuleResolutionCache = ts.createModuleResolutionCache(
+        ts.sys.getCurrentDirectory(),
+        getCanonicalFileName,
+        options
+    );
+
     function resolveModuleName(name: string, containingFile: string, compilerOptions: any) {
         // Delegate to the TS resolver first.
         // If that does not bring up anything, try the Svelte Module loader
@@ -286,14 +302,20 @@ async function createTsCompilerHost(options: any, svelteMap: SvelteMap, absDecla
             name,
             containingFile,
             compilerOptions,
-            ts.sys
+            ts.sys,
+            tsModuleResolutionCache
         ).resolvedModule;
         if (tsResolvedModule && !isVirtualSvelteFilepath(tsResolvedModule.resolvedFileName)) {
             return tsResolvedModule;
         }
 
-        return ts.resolveModuleName(name, containingFile, compilerOptions, svelteSys)
-            .resolvedModule;
+        return ts.resolveModuleName(
+            name,
+            containingFile,
+            compilerOptions,
+            svelteSys,
+            svelteModuleResolutionCache
+        ).resolvedModule;
     }
 
     return host;
